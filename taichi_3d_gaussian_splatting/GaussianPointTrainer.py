@@ -173,6 +173,11 @@ class GaussianPointCloudTrainer:
                 image_gt, 
                 point_invalid_mask=self.scene.point_invalid_mask.contiguous(),
                 pointcloud_features=self.scene.point_cloud_features.contiguous())
+
+            if torch.isnan(loss):
+                print(f"⚠️ NaN Loss detected at iteration {iteration}! Skipping step to preserve model.")
+                continue
+            
             loss.backward()
             optimizer.step()
             position_optimizer.step()
@@ -426,3 +431,15 @@ class GaussianPointCloudTrainer:
                 "val/psnr", mean_psnr_score, iteration)
             self.writer.add_scalar(
                 "val/ssim", mean_ssim_score, iteration)
+
+            # Save latest model (Safety Net)
+            latest_path = os.path.join(self.config.output_model_dir, "latest_scene.parquet")
+            self.scene.to_parquet(latest_path)
+
+            # Save best model
+            if mean_psnr_score > self.best_psnr_score:
+                self.best_psnr_score = mean_psnr_score
+                best_path = os.path.join(self.config.output_model_dir, "best_scene.parquet")
+                self.scene.to_parquet(best_path)
+                if self.config.print_metrics_to_console:
+                    print(f"🔥 New Best PSNR: {self.best_psnr_score:.4f}. Saved to {best_path}")
