@@ -290,6 +290,11 @@ class GaussianPointCloudTrainer:
             xyz_grad = grad_input.grad_point_in_camera
             uv_grad = grad_input.grad_viewspace
             feature_grad = grad_input.grad_pointfeatures_in_camera
+            
+            # Safety checks for empty or invalid tensors
+            if xyz_grad.numel() == 0 or uv_grad.numel() == 0 or feature_grad.numel() == 0:
+                return
+
             q_grad = feature_grad[:, :4]
             s_grad = feature_grad[:, 4:7]
             alpha_grad = feature_grad[:, 7]
@@ -298,16 +303,25 @@ class GaussianPointCloudTrainer:
             b_grad = feature_grad[:, 40:56]
             num_overlap_tiles = grad_input.num_overlap_tiles
             num_affected_pixels = grad_input.num_affected_pixels
-            writer.add_histogram("grad/xyz_grad", xyz_grad, iteration)
-            writer.add_histogram("grad/uv_grad", uv_grad, iteration)
-            writer.add_histogram("grad/q_grad", q_grad, iteration)
-            writer.add_histogram("grad/s_grad", s_grad, iteration)
-            writer.add_histogram("grad/alpha_grad", alpha_grad, iteration)
-            writer.add_histogram("grad/r_grad", r_grad, iteration)
-            writer.add_histogram("grad/g_grad", g_grad, iteration)
-            writer.add_histogram("grad/b_grad", b_grad, iteration)
-            writer.add_histogram("value/num_overlap_tiles", num_overlap_tiles, iteration)
-            writer.add_histogram("value/num_affected_pixels", num_affected_pixels, iteration)
+            
+            # Helper to safely add histogram
+            def safe_add_histogram(tag, values, step):
+                if values.numel() > 0 and not torch.isnan(values).all():
+                    # Filter out NaNs for plotting if some exist but not all
+                    valid_values = values[~torch.isnan(values)]
+                    if valid_values.numel() > 0:
+                        writer.add_histogram(tag, valid_values, step)
+
+            safe_add_histogram("grad/xyz_grad", xyz_grad, iteration)
+            safe_add_histogram("grad/uv_grad", uv_grad, iteration)
+            safe_add_histogram("grad/q_grad", q_grad, iteration)
+            safe_add_histogram("grad/s_grad", s_grad, iteration)
+            safe_add_histogram("grad/alpha_grad", alpha_grad, iteration)
+            safe_add_histogram("grad/r_grad", r_grad, iteration)
+            safe_add_histogram("grad/g_grad", g_grad, iteration)
+            safe_add_histogram("grad/b_grad", b_grad, iteration)
+            safe_add_histogram("value/num_overlap_tiles", num_overlap_tiles, iteration)
+            safe_add_histogram("value/num_affected_pixels", num_affected_pixels, iteration)
 
     @staticmethod
     def _plot_value_histogram(scene: GaussianPointCloudScene, writer, iteration):
