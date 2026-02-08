@@ -329,21 +329,35 @@ class GaussianPointCloudTrainer:
             valid_point_cloud = scene.point_cloud[scene.point_invalid_mask == 0]
             valid_point_cloud_features = scene.point_cloud_features[scene.point_invalid_mask == 0]
             num_valid_points = valid_point_cloud.shape[0]
+            
+            # Safety check: if no valid points, skip plotting
+            if num_valid_points == 0:
+                return
+
             q = valid_point_cloud_features[:, :4]
             s = valid_point_cloud_features[:, 4:7]
             alpha = valid_point_cloud_features[:, 7]
             r = valid_point_cloud_features[:, 8:24]
             g = valid_point_cloud_features[:, 24:40]
             b = valid_point_cloud_features[:, 40:56]
+            
             writer.add_scalar("value/num_valid_points", num_valid_points, iteration)
-            # print(f"num_valid_points={num_valid_points};")
-            writer.add_histogram("value/q", q, iteration)
-            writer.add_histogram("value/s", s, iteration)
-            writer.add_histogram("value/alpha", alpha, iteration)
-            writer.add_histogram("value/sigmoid_alpha", torch.sigmoid(alpha), iteration)
-            writer.add_histogram("value/r", r, iteration)
-            writer.add_histogram("value/g", g, iteration)
-            writer.add_histogram("value/b", b, iteration)
+
+            # Helper to safely add histogram
+            def safe_add_histogram(tag, values, step):
+                if values.numel() > 0 and not torch.isnan(values).all():
+                    # Filter out NaNs for plotting if some exist but not all
+                    valid_values = values[~torch.isnan(values)]
+                    if valid_values.numel() > 0:
+                        writer.add_histogram(tag, valid_values, step)
+
+            safe_add_histogram("value/q", q, iteration)
+            safe_add_histogram("value/s", s, iteration)
+            safe_add_histogram("value/alpha", alpha, iteration)
+            safe_add_histogram("value/sigmoid_alpha", torch.sigmoid(alpha), iteration)
+            safe_add_histogram("value/r", r, iteration)
+            safe_add_histogram("value/g", g, iteration)
+            safe_add_histogram("value/b", b, iteration)
 
     def validation(self, val_data_loader, iteration):
         with torch.no_grad():
