@@ -130,6 +130,8 @@ class GaussianPointCloudScene(torch.nn.Module):
         return torch.log(x / (1.0 - x))
 
     def to_parquet(self, path: str):
+        # ensure directory exists
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         valid_point_cloud = self.point_cloud[self.point_invalid_mask == 0]
         valid_point_cloud_features = self.point_cloud_features[self.point_invalid_mask == 0]
         point_cloud_df = pd.DataFrame(
