@@ -8,7 +8,7 @@ from .LossFunction import LossFunction
 import torch
 import argparse
 from dataclass_wizard import YAMLWizard
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from torch.utils.tensorboard import SummaryWriter
 from torchvision.utils import make_grid
 import torchvision.transforms as transforms
@@ -52,10 +52,10 @@ class GaussianPointCloudTrainer:
         half_downsample_factor_interval: int = 250
         summary_writer_log_dir: str = "logs"
         output_model_dir: Optional[str] = None
-        rasterisation_config: GaussianPointCloudRasterisation.GaussianPointCloudRasterisationConfig = GaussianPointCloudRasterisation.GaussianPointCloudRasterisationConfig()
-        adaptive_controller_config: GaussianPointAdaptiveController.GaussianPointAdaptiveControllerConfig = GaussianPointAdaptiveController.GaussianPointAdaptiveControllerConfig()
-        gaussian_point_cloud_scene_config: GaussianPointCloudScene.PointCloudSceneConfig = GaussianPointCloudScene.PointCloudSceneConfig()
-        loss_function_config: LossFunction.LossFunctionConfig = LossFunction.LossFunctionConfig()
+        rasterisation_config: GaussianPointCloudRasterisation.GaussianPointCloudRasterisationConfig = field(default_factory=GaussianPointCloudRasterisation.GaussianPointCloudRasterisationConfig)
+        adaptive_controller_config: GaussianPointAdaptiveController.GaussianPointAdaptiveControllerConfig = field(default_factory=GaussianPointAdaptiveController.GaussianPointAdaptiveControllerConfig)
+        gaussian_point_cloud_scene_config: GaussianPointCloudScene.PointCloudSceneConfig = field(default_factory=GaussianPointCloudScene.PointCloudSceneConfig)
+        loss_function_config: LossFunction.LossFunctionConfig = field(default_factory=LossFunction.LossFunctionConfig)
 
     def __init__(self, config: TrainConfig):
         self.config = config
@@ -153,13 +153,13 @@ class GaussianPointCloudTrainer:
             camera_info.camera_width = int(camera_info.camera_width)
             camera_info.camera_height = int(camera_info.camera_height)
             gaussian_point_cloud_rasterisation_input = GaussianPointCloudRasterisation.GaussianPointCloudRasterisationInput(
-                point_cloud=self.scene.point_cloud,
-                point_cloud_features=self.scene.point_cloud_features,
-                point_object_id=self.scene.point_object_id,
-                point_invalid_mask=self.scene.point_invalid_mask,
+                point_cloud=self.scene.point_cloud.contiguous(),
+                point_cloud_features=self.scene.point_cloud_features.contiguous(),
+                point_object_id=self.scene.point_object_id.contiguous(),
+                point_invalid_mask=self.scene.point_invalid_mask.contiguous(),
                 camera_info=camera_info,
-                q_pointcloud_camera=q_pointcloud_camera,
-                t_pointcloud_camera=t_pointcloud_camera,
+                q_pointcloud_camera=q_pointcloud_camera.contiguous(),
+                t_pointcloud_camera=t_pointcloud_camera.contiguous(),
                 color_max_sh_band=iteration // self.config.increase_color_max_sh_band_interval,
             )
             image_pred, image_depth, pixel_valid_point_count = self.rasterisation(
@@ -171,8 +171,8 @@ class GaussianPointCloudTrainer:
             loss, l1_loss, ssim_loss = self.loss_function(
                 image_pred, 
                 image_gt, 
-                point_invalid_mask=self.scene.point_invalid_mask,
-                pointcloud_features=self.scene.point_cloud_features)
+                point_invalid_mask=self.scene.point_invalid_mask.contiguous(),
+                pointcloud_features=self.scene.point_cloud_features.contiguous())
             loss.backward()
             optimizer.step()
             position_optimizer.step()
@@ -352,13 +352,13 @@ class GaussianPointCloudTrainer:
                 camera_info.camera_width = int(camera_info.camera_width)
                 camera_info.camera_height = int(camera_info.camera_height)
                 gaussian_point_cloud_rasterisation_input = GaussianPointCloudRasterisation.GaussianPointCloudRasterisationInput(
-                    point_cloud=self.scene.point_cloud,
-                    point_cloud_features=self.scene.point_cloud_features,
-                    point_object_id=self.scene.point_object_id,
-                    point_invalid_mask=self.scene.point_invalid_mask,
+                    point_cloud=self.scene.point_cloud.contiguous(),
+                    point_cloud_features=self.scene.point_cloud_features.contiguous(),
+                    point_object_id=self.scene.point_object_id.contiguous(),
+                    point_invalid_mask=self.scene.point_invalid_mask.contiguous(),
                     camera_info=camera_info,
-                    q_pointcloud_camera=q_pointcloud_camera,
-                    t_pointcloud_camera=t_pointcloud_camera,
+                    q_pointcloud_camera=q_pointcloud_camera.contiguous(),
+                    t_pointcloud_camera=t_pointcloud_camera.contiguous(),
                     color_max_sh_band=3
                 )
                 start_event.record()
@@ -398,18 +398,3 @@ class GaussianPointCloudTrainer:
                 "val/psnr", mean_psnr_score, iteration)
             self.writer.add_scalar(
                 "val/ssim", mean_ssim_score, iteration)
-            self.writer.add_scalar(
-                "val/inference_time", average_inference_time, iteration)
-            if self.config.print_metrics_to_console:
-                print(f"val_loss={mean_loss};")
-                print(f"val_psnr={mean_psnr_score};")
-                print(f"val_psnr_{iteration}={mean_psnr_score};")
-                print(f"val_ssim={mean_ssim_score};")
-                print(f"val_ssim_{iteration}={mean_ssim_score};")
-                print(f"val_inference_time={average_inference_time};")
-            self.scene.to_parquet(
-                os.path.join(self.config.output_model_dir, f"scene_{iteration}.parquet"))
-            if mean_psnr_score > self.best_psnr_score:
-                self.best_psnr_score = mean_psnr_score
-                self.scene.to_parquet(
-                    os.path.join(self.config.output_model_dir, f"best_scene.parquet"))
