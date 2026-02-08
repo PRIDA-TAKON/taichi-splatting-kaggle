@@ -7,6 +7,7 @@ from scipy.spatial import cKDTree
 from typing import Optional, Union
 from dataclass_wizard import YAMLWizard
 from plyfile import PlyData, PlyElement
+import os
 
 
 class GaussianPointCloudScene(torch.nn.Module):
